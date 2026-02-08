@@ -47,7 +47,7 @@ chrome.webRequest.onBeforeRequest.addListener(
 
         // 3. SCHEDULE UNMUTE
         // We add 1 extra second (1000ms) buffer just to be safe
-        const muteDuration = (durationSec * 1000) + 1000;
+        const muteDuration = (durationSec * 1000) + 100;
 
         unmuteTimer = setTimeout(() => {
           chrome.tabs.get(details.tabId, (tab) => {
