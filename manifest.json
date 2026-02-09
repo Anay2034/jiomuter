@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "JioHotstar Ad Muter",
-  "version": "3.0",
+  "version": "4.0",
   "permissions": [
     "webRequest",
     "tabs"
   ],
   "host_permissions": [
     "*://*.hotstar.com/*",
-    "*://bifrost-api.hotstar.com/*"
+    "*://bifrost-api.hotstar.com/*",
+    "*://open.spotify.com/*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -1,16 +1,13 @@
 // background.js
 
-// Store the timer ID so we can cancel it if a new ad starts immediately
 let unmuteTimer = null;
 
-// Regex strategies to find duration from ad names like:
-// "EMIRATES_..._ENG_15" -> 15 seconds
-// "Vimal_20s" -> 20 seconds
+// Regex to extract duration from ad names
 const durationRegexes = [
-  /_(\d{1,3})$/,           // Matches number at the very end (e.g., "_15")
-  /_(\d{1,3})[sS]?_/,      // Matches number surrounded by underscores (e.g., "_15_")
-  /(\d{1,3})[sS](?:Eng|Hin)/i, // Matches "15sEng"
-  /(?:Eng|Hin).*?(\d{1,3})/i   // Matches "Eng_15"
+  /_(\d{1,3})$/,           
+  /_(\d{1,3})[sS]?_/,      
+  /(\d{1,3})[sS](?:Eng|Hin)/i, 
+  /(?:Eng|Hin).*?(\d{1,3})/i   
 ];
 
 chrome.webRequest.onBeforeRequest.addListener(
@@ -18,42 +15,63 @@ chrome.webRequest.onBeforeRequest.addListener(
     const url = new URL(details.url);
     const adName = url.searchParams.get("adName");
 
-    // If there is an adName, it's an ad!
     if (adName) {
       console.log(`🎯 Ad Detected: ${adName}`);
 
       // 1. EXTRACT DURATION
-      let durationSec = 20; // Default fallback
-      
+      let durationSec = 20; 
       for (const regex of durationRegexes) {
         const match = adName.match(regex);
         if (match && match[1]) {
           durationSec = parseInt(match[1], 10);
-          console.log(`⏱️ Parsed Duration: ${durationSec} seconds`);
           break;
         }
       }
 
-      // 2. MUTE THE TAB
+      // 2. LOGIC: MUTE HOTSTAR -> PLAY SPOTIFY
       if (details.tabId !== -1) {
-        // Clear any existing unmute timer (in case this is the 2nd ad in a row)
+        
+        // Reset timer if we are in an ad chain
         if (unmuteTimer) {
             clearTimeout(unmuteTimer);
-            console.log("🔄 Ad chain detected: Extending mute time.");
+            console.log("🔄 Ad chain: Extending mute.");
         }
 
-        // Mute immediately
+        // A. Mute Hotstar
         chrome.tabs.update(details.tabId, { muted: true });
+        console.log(`🔇 Muted Hotstar (Tab ${details.tabId})`);
 
-        // 3. SCHEDULE UNMUTE
-        // We add 1 extra second (1000ms) buffer just to be safe
-        const muteDuration = (durationSec * 1000) + 100;
+        // B. Unmute Spotify (Play Music)
+        // We query specifically for Spotify tabs
+        const spotifyTabs = await chrome.tabs.query({ url: "*://open.spotify.com/*" });
+        for (const tab of spotifyTabs) {
+            chrome.tabs.update(tab.id, { muted: false });
+            console.log(`🎵 Unmuted Spotify (Tab ${tab.id})`);
+            
+            // Optional: If you want to force 'Play', you'd need scripting permissions. 
+            // For now, this just un-mutes the tab.
+        }
+
+        // 3. SCHEDULE THE RETURN TO COMMENTARY
+        const muteDuration = (durationSec * 1000) + 100; // 1s buffer
 
         unmuteTimer = setTimeout(() => {
           chrome.tabs.get(details.tabId, (tab) => {
             if (tab && tab.mutedInfo.muted) {
+               
+               // A. Unmute Hotstar (Commentary Back)
                chrome.tabs.update(details.tabId, { muted: false });
-               console.log(`🔊 Ad over. Unmuting tab ${details.tabId}`);
+               console.log(`🔊 Ad over. Commentary back on Tab ${details.tabId}`);
+               
+               // B. Mute Spotify (Music Off)
+               // Query again in case the user closed/opened Spotify during the ad
+               chrome.tabs.query({ url: "*://open.spotify.com/*" }, (tabs) => {
+                   tabs.forEach(sTab => {
+                       chrome.tabs.update(sTab.id, { muted: true });
+                       console.log(`🔇 Muted Spotify (Tab ${sTab.id})`);
+                   });
+               });
+
                unmuteTimer = null;
             }
           });
@@ -62,7 +80,6 @@ chrome.webRequest.onBeforeRequest.addListener(
     }
   },
   {
-    // Filter specifically for the impression tracker you found
     urls: [
         "*://bifrost-api.hotstar.com/v1/events/track/ct_impression*",
         "*://*.hotstar.com/*adName*" 
