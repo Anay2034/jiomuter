@@ -1,8 +1,22 @@
 // background.js
 
+// --- CONFIGURATION ---
+let currentMode = 'SILENT'; // Default
 let unmuteTimer = null;
 
-// Regex to extract duration from ad names
+// Load saved mode
+chrome.storage.local.get(['djMode'], (res) => {
+  if (res.djMode) currentMode = res.djMode;
+});
+
+// Listen for mode changes
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.djMode) {
+    currentMode = changes.djMode.newValue;
+    console.log(`🎛️ Mode switched to: ${currentMode}`);
+  }
+});
+
 const durationRegexes = [
   /_(\d{1,3})$/,           
   /_(\d{1,3})[sS]?_/,      
@@ -10,6 +24,40 @@ const durationRegexes = [
   /(?:Eng|Hin).*?(\d{1,3})/i   
 ];
 
+// --- SPOTIFY CONTROLS ---
+function controlSpotify(action) {
+  // 1. If in Silent Mode, DO NOTHING.
+  if (currentMode === 'SILENT') return;
+
+  // 2. Otherwise, control the music
+  chrome.tabs.query({ url: "*://open.spotify.com/*" }, (tabs) => {
+    tabs.forEach(tab => {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (act) => {
+          const media = document.querySelector('video'); 
+          const btn = document.querySelector('[data-testid="control-button-playpause"]');
+          
+          if (media) {
+            if (act === 'MAX_VOLUME') media.volume = 1.0;
+            else if (act === 'LOW_VOLUME') media.volume = 0.3;
+          }
+          
+          if (act === 'PLAY') {
+             if (btn && btn.getAttribute('aria-label') === 'Play') btn.click();
+             if (media) media.volume = 1.0;
+          }
+          else if (act === 'PAUSE') {
+             if (btn && btn.getAttribute('aria-label') === 'Pause') btn.click();
+          }
+        },
+        args: [action]
+      });
+    });
+  });
+}
+
+// --- MAIN LISTENER ---
 chrome.webRequest.onBeforeRequest.addListener(
   async (details) => {
     const url = new URL(details.url);
@@ -18,7 +66,6 @@ chrome.webRequest.onBeforeRequest.addListener(
     if (adName) {
       console.log(`🎯 Ad Detected: ${adName}`);
 
-      // 1. EXTRACT DURATION
       let durationSec = 20; 
       for (const regex of durationRegexes) {
         const match = adName.match(regex);
@@ -28,50 +75,38 @@ chrome.webRequest.onBeforeRequest.addListener(
         }
       }
 
-      // 2. LOGIC: MUTE HOTSTAR -> PLAY SPOTIFY
       if (details.tabId !== -1) {
-        
-        // Reset timer if we are in an ad chain
-        if (unmuteTimer) {
-            clearTimeout(unmuteTimer);
-            console.log("🔄 Ad chain: Extending mute.");
-        }
+        if (unmuteTimer) clearTimeout(unmuteTimer);
 
-        // A. Mute Hotstar
+        // --- STEP 1: AD STARTS ---
+        // A. Mute Hotstar (Always happens)
         chrome.tabs.update(details.tabId, { muted: true });
-        console.log(`🔇 Muted Hotstar (Tab ${details.tabId})`);
 
-        // B. Unmute Spotify (Play Music)
-        // We query specifically for Spotify tabs
-        const spotifyTabs = await chrome.tabs.query({ url: "*://open.spotify.com/*" });
-        for (const tab of spotifyTabs) {
-            chrome.tabs.update(tab.id, { muted: false });
-            console.log(`🎵 Unmuted Spotify (Tab ${tab.id})`);
-            
-            // Optional: If you want to force 'Play', you'd need scripting permissions. 
-            // For now, this just un-mutes the tab.
+        // B. Handle Spotify (Only if NOT Silent Mode)
+        if (currentMode === 'PAUSE') {
+           controlSpotify('PLAY');
+        } else if (currentMode === 'DUCK') {
+           controlSpotify('MAX_VOLUME');
         }
 
-        // 3. SCHEDULE THE RETURN TO COMMENTARY
-        const muteDuration = (durationSec * 1000) + 100; // 1s buffer
+        // --- STEP 2: AD ENDS ---
+        const muteDuration = (durationSec * 1000) + 1000; 
 
         unmuteTimer = setTimeout(() => {
           chrome.tabs.get(details.tabId, (tab) => {
             if (tab && tab.mutedInfo.muted) {
                
-               // A. Unmute Hotstar (Commentary Back)
+               // A. Unmute Hotstar
                chrome.tabs.update(details.tabId, { muted: false });
-               console.log(`🔊 Ad over. Commentary back on Tab ${details.tabId}`);
                
-               // B. Mute Spotify (Music Off)
-               // Query again in case the user closed/opened Spotify during the ad
-               chrome.tabs.query({ url: "*://open.spotify.com/*" }, (tabs) => {
-                   tabs.forEach(sTab => {
-                       chrome.tabs.update(sTab.id, { muted: true });
-                       console.log(`🔇 Muted Spotify (Tab ${sTab.id})`);
-                   });
-               });
-
+               // B. Handle Spotify
+               if (currentMode === 'PAUSE') {
+                  controlSpotify('PAUSE');
+               } else if (currentMode === 'DUCK') {
+                  controlSpotify('LOW_VOLUME');
+               }
+               // If SILENT, we do nothing here.
+               
                unmuteTimer = null;
             }
           });
