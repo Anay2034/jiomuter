@@ -1,6 +1,44 @@
-# JioHotstar Ad Muter
+# JioHotstar DJ
 
-A simple Chrome Extension that automatically mutes audio during ads on Hotstar.
+A powerful Chrome Extension that automatically controls audio during ads on Hotstar and optionally manages your Spotify playback.
+
+## Project Usecase
+
+**Problem:** Watching Hotstar streams can be frustrating with sudden loud ads interrupting your viewing experience, especially if you're listening to Spotify in the background.
+
+**Solution:** JioHotstar DJ automatically detects ads on Hotstar and intelligently manages audio:
+- Mutes the Hotstar video during ads
+- Optionally pauses, resumes, or adjusts volume on Spotify based on your preference
+- Automatically returns to normal settings when the ad ends
+
+**Perfect for:**
+- Uninterrupted entertainment experience
+- Background music lovers who want continuous Spotify playback
+- Users who want to avoid sudden audio spikes from ads
+
+## How to Use
+
+Once installed, the extension adds a **DJ Control** popup with three operating modes:
+
+### 1. **Silent Mode** (Default)
+- **Hotstar:** Mutes ads only
+- **Spotify:** No changes (plays normally)
+- **Best for:** Users who only want Hotstar ads muted
+
+### 2. **Stop & Start Mode**
+- **Hotstar:** Mutes ads
+- **Spotify:** Pauses during Hotstar shows, resumes during ads
+- **Best for:** Users who want to focus on Hotstar and use ad breaks for music
+
+### 3. **Background Music Mode**
+- **Hotstar:** Mutes ads
+- **Spotify:** Plays at 30% volume during Hotstar shows, 100% during ads
+- **Best for:** Users who enjoy background music while watching
+
+**To Change Modes:**
+1. Click the extension icon in your Chrome toolbar
+2. Select your preferred mode from the popup
+3. Your choice is saved automatically
 
 ##  How to Install
 

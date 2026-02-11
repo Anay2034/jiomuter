@@ -82,8 +82,8 @@ function controlSpotify(action) {
           };
 
           // --- 3. EXECUTE COMMANDS ---
-          if (act === 'MAX_VOLUME') setVolume(100);
-          if (act === 'LOW_VOLUME') setVolume(70);  // 30% Background Music
+          if (act === 'MAX_VOLUME') setVolume(90);
+          if (act === 'LOW_VOLUME') setVolume(50);  // 30% Background Music
           if (act === 'PLAY') togglePlay(true);
           if (act === 'PAUSE') togglePlay(false);
         },
