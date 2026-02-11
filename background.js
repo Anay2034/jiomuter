@@ -1,7 +1,7 @@
 // background.js
 
 // --- CONFIGURATION ---
-let currentMode = 'SILENT'; // Default
+let currentMode = 'SILENT'; 
 let unmuteTimer = null;
 
 // Load saved mode
@@ -26,30 +26,66 @@ const durationRegexes = [
 
 // --- SPOTIFY CONTROLS ---
 function controlSpotify(action) {
-  // 1. If in Silent Mode, DO NOTHING.
   if (currentMode === 'SILENT') return;
 
-  // 2. Otherwise, control the music
-  chrome.tabs.query({ url: "*://open.spotify.com/*" }, (tabs) => {
+  // Search for your specific URL pattern
+  const spotifyUrlPattern = "*://open.spotify.com/*";
+
+  chrome.tabs.query({ url: spotifyUrlPattern }, (tabs) => {
+    if (tabs.length === 0) {
+        console.log("⚠️ No Spotify tabs found.");
+        return;
+    }
+
     tabs.forEach(tab => {
       chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: (act) => {
-          const media = document.querySelector('video'); 
-          const btn = document.querySelector('[data-testid="control-button-playpause"]');
           
-          if (media) {
-            if (act === 'MAX_VOLUME') media.volume = 1.0;
-            else if (act === 'LOW_VOLUME') media.volume = 0.3;
-          }
-          
-          if (act === 'PLAY') {
-             if (btn && btn.getAttribute('aria-label') === 'Play') btn.click();
-             if (media) media.volume = 1.0;
-          }
-          else if (act === 'PAUSE') {
-             if (btn && btn.getAttribute('aria-label') === 'Pause') btn.click();
-          }
+          // --- 1. VOLUME LOGIC (The React Hack) ---
+          const setVolume = (pct) => {
+              const slider = document.querySelector('[data-testid="volume-bar"] input');
+              if (slider) {
+                  const val = pct / 100;
+                  
+                  // FORCE React to accept the value using the native setter
+                  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                  nativeInputValueSetter.call(slider, val);
+                  
+                  // Dispatch events to trigger the UI update
+                  slider.dispatchEvent(new Event('input', { bubbles: true }));
+                  slider.dispatchEvent(new Event('change', { bubbles: true }));
+                  
+                  console.log(`🔉 Volume forced to ${pct}%`);
+              } else {
+                  console.log("❌ Volume slider not found");
+              }
+          };
+
+          // --- 2. PLAY/PAUSE LOGIC ---
+          const togglePlay = (shouldPlay) => {
+              const btn = document.querySelector('[data-testid="control-button-playpause"]');
+              const media = document.querySelector('video, audio'); // Truth source
+              
+              if (!btn) return;
+              
+              // If we have a media tag, check its state. If not, rely on button label.
+              const isPaused = media ? media.paused : (btn.getAttribute('aria-label') === 'Play');
+              
+              if (shouldPlay && isPaused) {
+                  btn.click();
+                  console.log("▶️ Clicking Play");
+              } else if (!shouldPlay && !isPaused) {
+                  btn.click();
+                  console.log("⏸️ Clicking Pause");
+              }
+          };
+
+          // --- 3. EXECUTE COMMANDS ---
+          if (act === 'MAX_VOLUME') setVolume(100);
+          if (act === 'LOW_VOLUME') setVolume(70);  // 30% Background Music
+          if (act === 'PLAY') togglePlay(true);
+          if (act === 'PAUSE') togglePlay(false);
         },
         args: [action]
       });
@@ -65,7 +101,6 @@ chrome.webRequest.onBeforeRequest.addListener(
 
     if (adName) {
       console.log(`🎯 Ad Detected: ${adName}`);
-
       let durationSec = 20; 
       for (const regex of durationRegexes) {
         const match = adName.match(regex);
@@ -76,21 +111,20 @@ chrome.webRequest.onBeforeRequest.addListener(
       }
 
       if (details.tabId !== -1) {
-        if (unmuteTimer) clearTimeout(unmuteTimer);
-
-        // --- STEP 1: AD STARTS ---
-        // A. Mute Hotstar (Always happens)
-        chrome.tabs.update(details.tabId, { muted: true });
-
-        // B. Handle Spotify (Only if NOT Silent Mode)
-        if (currentMode === 'PAUSE') {
-           controlSpotify('PLAY');
-        } else if (currentMode === 'DUCK') {
-           controlSpotify('MAX_VOLUME');
+        if (unmuteTimer) {
+            clearTimeout(unmuteTimer);
+            console.log("🔄 Ad Chain: Timer extended.");
         }
 
-        // --- STEP 2: AD ENDS ---
-        const muteDuration = (durationSec * 1000) + 1000; 
+        // 1. Mute Hotstar (Always)
+        chrome.tabs.update(details.tabId, { muted: true });
+
+        // 2. Control Spotify (Action: AD START)
+        if (currentMode === 'PAUSE') controlSpotify('PLAY');     // Resume Music
+        else if (currentMode === 'DUCK') controlSpotify('MAX_VOLUME'); // Max Volume
+
+        // 3. Schedule Return (Action: AD END)
+        const muteDuration = (durationSec * 1000) + 500; 
 
         unmuteTimer = setTimeout(() => {
           chrome.tabs.get(details.tabId, (tab) => {
@@ -99,13 +133,9 @@ chrome.webRequest.onBeforeRequest.addListener(
                // A. Unmute Hotstar
                chrome.tabs.update(details.tabId, { muted: false });
                
-               // B. Handle Spotify
-               if (currentMode === 'PAUSE') {
-                  controlSpotify('PAUSE');
-               } else if (currentMode === 'DUCK') {
-                  controlSpotify('LOW_VOLUME');
-               }
-               // If SILENT, we do nothing here.
+               // B. Control Spotify
+               if (currentMode === 'PAUSE') controlSpotify('PAUSE');    // Stop Music
+               else if (currentMode === 'DUCK') controlSpotify('LOW_VOLUME'); // Background Volume
                
                unmuteTimer = null;
             }
