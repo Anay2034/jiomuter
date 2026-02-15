@@ -1,19 +1,31 @@
 // background.js
 
 // --- CONFIGURATION ---
-let currentMode = 'SILENT'; 
+let currentMode = 'SILENT';
+let maxVolume = 70;
+let lowVolume = 45;
 let unmuteTimer = null;
 
-// Load saved mode
-chrome.storage.local.get(['djMode'], (res) => {
+// Load saved settings
+chrome.storage.local.get(['djMode', 'maxVolume', 'lowVolume'], (res) => {
   if (res.djMode) currentMode = res.djMode;
+  if (res.maxVolume) maxVolume = res.maxVolume;
+  if (res.lowVolume) lowVolume = res.lowVolume;
 });
 
-// Listen for mode changes
+// Listen for setting changes
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.djMode) {
     currentMode = changes.djMode.newValue;
     console.log(`🎛️ Mode switched to: ${currentMode}`);
+  }
+  if (changes.maxVolume) {
+    maxVolume = changes.maxVolume.newValue;
+    console.log(`🔊 Max Volume set to: ${maxVolume}%`);
+  }
+  if (changes.lowVolume) {
+    lowVolume = changes.lowVolume.newValue;
+    console.log(`🔉 Low Volume set to: ${lowVolume}%`);
   }
 });
 
@@ -82,8 +94,8 @@ function controlSpotify(action) {
           };
 
           // --- 3. EXECUTE COMMANDS ---
-          if (act === 'MAX_VOLUME') setVolume(90);
-          if (act === 'LOW_VOLUME') setVolume(50);  // 30% Background Music
+          if (act === 'MAX_VOLUME') setVolume(window.maxVolume || 70);
+          if (act === 'LOW_VOLUME') setVolume(window.lowVolume || 45);
           if (act === 'PLAY') togglePlay(true);
           if (act === 'PAUSE') togglePlay(false);
         },
@@ -121,7 +133,19 @@ chrome.webRequest.onBeforeRequest.addListener(
 
         // 2. Control Spotify (Action: AD START)
         if (currentMode === 'PAUSE') controlSpotify('PLAY');     // Resume Music
-        else if (currentMode === 'DUCK') controlSpotify('MAX_VOLUME'); // Max Volume
+        else if (currentMode === 'DUCK') {
+          // Pass volume settings to content script
+          chrome.tabs.query({ url: "*://open.spotify.com/*" }, (tabs) => {
+            tabs.forEach(tab => {
+              chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (vol) => { window.maxVolume = vol; },
+                args: [maxVolume]
+              });
+            });
+          });
+          controlSpotify('MAX_VOLUME');
+        }
 
         // 3. Schedule Return (Action: AD END)
         const muteDuration = (durationSec * 1000) + 500; 
@@ -135,7 +159,19 @@ chrome.webRequest.onBeforeRequest.addListener(
                
                // B. Control Spotify
                if (currentMode === 'PAUSE') controlSpotify('PAUSE');    // Stop Music
-               else if (currentMode === 'DUCK') controlSpotify('LOW_VOLUME'); // Background Volume
+               else if (currentMode === 'DUCK') {
+                 // Pass volume settings to content script
+                 chrome.tabs.query({ url: "*://open.spotify.com/*" }, (tabs) => {
+                   tabs.forEach(tab => {
+                     chrome.scripting.executeScript({
+                       target: { tabId: tab.id },
+                       func: (vol) => { window.lowVolume = vol; },
+                       args: [lowVolume]
+                     });
+                   });
+                 });
+                 controlSpotify('LOW_VOLUME');
+               }
                
                unmuteTimer = null;
             }

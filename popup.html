@@ -39,6 +39,22 @@
     <small>Mute Ads Only.<br>Don't touch Spotify.</small>
   </div>
 
+  <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #333;">
+    <label style="margin-bottom: 8px;">Max Volume (Ads):</label>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <input type="range" id="maxVolume" min="0" max="100" value="70" style="display: block; flex: 1;">
+      <span id="maxVolLabel" style="width: 30px; text-align: right;">70%</span>
+    </div>
+  </div>
+
+  <div style="margin-top: 15px;">
+    <label style="margin-bottom: 8px;">Low Volume (Match):</label>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <input type="range" id="lowVolume" min="0" max="100" value="45" style="display: block; flex: 1;">
+      <span id="lowVolLabel" style="width: 30px; text-align: right;">45%</span>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>
